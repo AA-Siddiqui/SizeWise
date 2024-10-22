@@ -1,6 +1,7 @@
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
@@ -21,64 +22,90 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final controller = UltralyticsYoloCameraController();
-  final String filePath = "assets/ThePrestige.jpg";
+  // final String filePath = "assets/dog.webp";
+  String? filePath;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
+        floatingActionButton: FloatingActionButton(
+          onPressed: () async {
+            try {
+              final image =
+                  await ImagePicker().pickImage(source: ImageSource.gallery);
+              if (image == null) return;
+              // final imageTemp = File(image.path);
+              setState(() => filePath = image.path);
+            } on PlatformException catch (e) {
+              print('Failed to pick image: $e');
+            }
+          },
+          child: const Icon(Icons.add_a_photo),
+        ),
         body: FutureBuilder<bool>(
           future: _checkPermissions(),
           builder: (context, snapshot) {
             final allPermissionsGranted = snapshot.data ?? false;
-            final Image image = Image.asset(filePath);
+            // final Image image = Image.asset(filePath);
+            final Image image;
+            if (filePath != null) {
+              image = Image.file(io.File(filePath!));
+            } else {
+              image = Image.asset("assets/dog.webp");
+            }
 
             return !allPermissionsGranted
                 ? const Center(
-                    child: Text("Permission Granted"),
+                    child: Text("Permission Not Granted"),
                   )
-                : FutureBuilder<Rec>(
-                    future: _getDetectionResult(),
-                    builder: (context, snapshot) {
-                      return snapshot.data == null
-                          ? const Center(
-                              child: Text("Loading"),
-                            )
-                          : Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  snapshot.data?.column ??
-                                      const Center(
-                                        child: Text(
-                                          "Loaded but failed",
-                                        ),
-                                      ),
-                                  Stack(
+                : filePath == null
+                    ? const Center(
+                        child: Text("Image Not Selected"),
+                      )
+                    : FutureBuilder<Rec>(
+                        future: _getDetectionResult(),
+                        builder: (context, snapshot) {
+                          return snapshot.data == null
+                              ? const Center(
+                                  child: Text("Loading"),
+                                )
+                              : Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Center(
-                                        child: image,
+                                      snapshot.data?.column ??
+                                          const Center(
+                                            child: Text(
+                                              "Loaded but failed",
+                                            ),
+                                          ),
+                                      Stack(
+                                        children: [
+                                          Center(
+                                            child: image,
+                                          ),
+                                          ...snapshot.data?.detectedObject
+                                                  .where((obj) =>
+                                                      obj != null &&
+                                                      obj.confidence > 0.3)
+                                                  .map((e) {
+                                                return Positioned.fill(
+                                                  child: CustomPaint(
+                                                    painter: RectPainter(
+                                                        e!.boundingBox),
+                                                    child: Container(),
+                                                  ),
+                                                );
+                                              }).toList() ??
+                                              [],
+                                        ],
                                       ),
-                                      ...snapshot.data?.detectedObject.map((e) {
-                                            if (e == null) {
-                                              return const Placeholder();
-                                            }
-                                            return Positioned.fill(
-                                              child: CustomPaint(
-                                                painter:
-                                                    RectPainter(e.boundingBox),
-                                                child: Container(),
-                                              ),
-                                            );
-                                          }).toList() ??
-                                          [],
                                     ],
                                   ),
-                                ],
-                              ),
-                            );
-                    },
-                  );
+                                );
+                        },
+                      );
           },
         ),
       ),
@@ -110,7 +137,7 @@ class _MyAppState extends State<MyApp> {
     ObjectDetector predictor = await _initObjectDetectorWithLocalModel();
     String x = await predictor.loadModel(useGpu: true) ?? "Failed GPU?";
     List<DetectedObject?> objects =
-        await predictor.detect(imagePath: await _copy(filePath)) ?? [];
+        await predictor.detect(imagePath: await _copy(filePath!)) ?? [];
 
     return Rec(
         detectedObject: objects,
@@ -124,7 +151,7 @@ class _MyAppState extends State<MyApp> {
                   DataColumn(label: Text("Confidence")),
                   DataColumn(label: Text("Rect")),
                 ],
-                rows: objects.map(
+                rows: objects.where((e) => e != null && e.confidence > 0.3).map(
                   (object) {
                     return DataRow(
                       cells: [
