@@ -136,8 +136,8 @@ class _MyAppState extends State<MyApp> {
   Future<Rec> _getDetectionResult() async {
     ObjectDetector predictor = await _initObjectDetectorWithLocalModel();
     String x = await predictor.loadModel(useGpu: true) ?? "Failed GPU?";
-    List<DetectedObject?> objects =
-        await predictor.detect(imagePath: await _copy(filePath!)) ?? [];
+    String y = filePath == null ? await _copy("assets/dog.webp") : filePath!;
+    List<DetectedObject?> objects = await predictor.detect(imagePath: y) ?? [];
 
     return Rec(
         detectedObject: objects,
