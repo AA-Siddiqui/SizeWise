@@ -116,13 +116,8 @@ class _MyAppState extends State<MyApp> {
         detectedObject: objects,
         column: Column(
           children: [
-            StreamBuilder(
-              stream: predictor.inferenceTime,
-              builder: (context, snapshot) {
-                return Text("$x (${snapshot.data})");
-              },
-            ),
-            if (objects.isEmpty)
+            Text(x),
+            if (objects.isNotEmpty)
               DataTable(
                 columns: const [
                   DataColumn(label: Text("Label")),
