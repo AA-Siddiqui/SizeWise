@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,6 +21,28 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
+const List<Color> colorList = [...Colors.primaries];
+const List<String> colorNameList = [
+  "Red",
+  "Pink",
+  "Purple",
+  "DeepPurple",
+  "Indigo",
+  "Blue",
+  "LightBlue",
+  "Cyan",
+  "Teal",
+  "Green",
+  "LightGreen",
+  "Lime",
+  "Yellow",
+  "Amber",
+  "Orange",
+  "DeepOrange",
+  "Brown",
+  "BlueGrey",
+];
+
 class _MyAppState extends State<MyApp> {
   final controller = UltralyticsYoloCameraController();
   // final String filePath = "assets/dog.webp";
@@ -29,19 +52,39 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        floatingActionButton: FloatingActionButton(
-          onPressed: () async {
-            try {
-              final image =
-                  await ImagePicker().pickImage(source: ImageSource.gallery);
-              if (image == null) return;
-              // final imageTemp = File(image.path);
-              setState(() => filePath = image.path);
-            } on PlatformException catch (e) {
-              print('Failed to pick image: $e');
-            }
-          },
-          child: const Icon(Icons.add_a_photo),
+        floatingActionButton: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FloatingActionButton.small(
+              onPressed: () async {
+                // TODO: Catch the error on PlatformException
+                try {
+                  final image =
+                      await ImagePicker().pickImage(source: ImageSource.camera);
+                  if (image == null) return;
+                  // final imageTemp = File(image.path);
+                  setState(() => filePath = image.path);
+                } finally {}
+              },
+              child: const Icon(Icons.camera),
+            ),
+            const SizedBox(
+              height: 10,
+            ),
+            FloatingActionButton(
+              onPressed: () async {
+                // TODO: Catch the error on PlatformException
+                try {
+                  final image = await ImagePicker()
+                      .pickImage(source: ImageSource.gallery);
+                  if (image == null) return;
+                  // final imageTemp = File(image.path);
+                  setState(() => filePath = image.path);
+                } finally {}
+              },
+              child: const Icon(Icons.add_a_photo),
+            ),
+          ],
         ),
         body: FutureBuilder<bool>(
           future: _checkPermissions(),
@@ -73,33 +116,38 @@ class _MyAppState extends State<MyApp> {
                               : Center(
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
+                                    verticalDirection: VerticalDirection.up,
                                     children: [
-                                      snapshot.data?.column ??
-                                          const Center(
-                                            child: Text(
-                                              "Loaded but failed",
-                                            ),
-                                          ),
                                       Stack(
                                         children: [
                                           Center(
                                             child: image,
                                           ),
                                           ...snapshot.data?.detectedObject
-                                                  .where((obj) =>
-                                                      obj != null &&
-                                                      obj.confidence > 0.3)
+                                                  .where((obj) => obj != null)
                                                   .map((e) {
                                                 return Positioned.fill(
                                                   child: CustomPaint(
                                                     painter: RectPainter(
-                                                        e!.boundingBox),
+                                                        e!.boundingBox,
+                                                        colorList[snapshot.data
+                                                                ?.detectedObject
+                                                                .indexOf(e) ??
+                                                            0]),
                                                     child: Container(),
                                                   ),
                                                 );
                                               }).toList() ??
                                               [],
                                         ],
+                                      ),
+                                      SingleChildScrollView(
+                                        child: snapshot.data?.column ??
+                                            const Center(
+                                              child: Text(
+                                                "Loaded but failed",
+                                              ),
+                                            ),
                                       ),
                                     ],
                                   ),
@@ -113,6 +161,27 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<ObjectDetector> _initObjectDetectorWithLocalModel() async {
+    // final modelPath = await _copy('assets/yolov8n.mlmodel');
+    // final model = LocalYoloModel(
+    //   id: '',
+    //   task: Task.detect,
+    //   format: Format.coreml,
+    //   modelPath: modelPath,
+    // );
+    final modelPath = await _copy('assets/yolov8n_int81.tflite');
+    final metadataPath = await _copy('assets/metadatad.yaml');
+    final model = LocalYoloModel(
+      id: '',
+      task: Task.detect,
+      format: Format.tflite,
+      modelPath: modelPath,
+      metadataPath: metadataPath,
+    );
+
+    return ObjectDetector(model: model);
+  }
+
+  Future<ObjectDetector> _initReferenceObjectDetectorWithLocalModel() async {
     // final modelPath = await _copy('assets/yolov8n.mlmodel');
     // final model = LocalYoloModel(
     //   id: '',
@@ -139,33 +208,73 @@ class _MyAppState extends State<MyApp> {
     String y = filePath == null ? await _copy("assets/dog.webp") : filePath!;
     List<DetectedObject?> objects = await predictor.detect(imagePath: y) ?? [];
 
+    ObjectDetector referencePredictor =
+        await _initReferenceObjectDetectorWithLocalModel();
+    String xx =
+        await referencePredictor.loadModel(useGpu: true) ?? "Failed GPU?";
+    String yy = filePath == null ? await _copy("assets/dog.webp") : filePath!;
+    List<DetectedObject?> referenceObjects =
+        await predictor.detect(imagePath: yy) ?? [];
+
+    DetectedObject maxReference = DetectedObject(
+        confidence: -1, boundingBox: Rect.zero, index: -1, label: "");
+    for (DetectedObject? o in referenceObjects) {
+      if (o != null && o.confidence > maxReference.confidence) {
+        maxReference = o;
+      }
+    }
+    print("Reference, Confidence: ${maxReference.confidence}");
+    print("Reference, Width in px: ${maxReference.boundingBox.width}");
+    print("Reference, Height in px: ${maxReference.boundingBox.height}");
+
+    final double widthRatio = maxReference.boundingBox.width / 1.85;
+    final double heightRatio = maxReference.boundingBox.height / 1.85;
+
+    print("Reference, X-Pixel per cm: $widthRatio");
+    print("Reference, Y-Pixel per cm: $heightRatio");
+
     return Rec(
         detectedObject: objects,
         column: Column(
           children: [
-            Text(x),
+            Text("$x, $xx"),
             if (objects.isNotEmpty)
+              // TODO: Make the table such that it includes item label, color of bounding box and size (autofilled if known)
               DataTable(
                 columns: const [
                   DataColumn(label: Text("Label")),
-                  DataColumn(label: Text("Confidence")),
-                  DataColumn(label: Text("Rect")),
+                  // DataColumn(label: Text("Confidence")),
+                  // DataColumn(label: Text("Rect")),
+                  DataColumn(label: Text("X-size")),
+                  DataColumn(label: Text("Y-size")),
                 ],
-                rows: objects.where((e) => e != null && e.confidence > 0.3).map(
+                rows: objects.where((e) => e != null).map(
+                  // rows: objects.where((e) => e != null).map(
                   (object) {
                     return DataRow(
                       cells: [
-                        DataCell(Text(object?.label ?? "What")),
-                        DataCell(
-                          Text(
-                            object?.confidence.toStringAsFixed(2) ?? "What",
-                          ),
-                        ),
-                        DataCell(
-                          Text(
-                            object?.boundingBox.toString().substring(13) ?? "0",
-                          ),
-                        ),
+                        // DataCell(Text(object?.label ?? "What")),
+                        DataCell(Text(colorNameList[objects.indexOf(object)])),
+                        // DataCell(
+                        //   Text(
+                        //     object?.confidence.toStringAsFixed(2) ?? "What",
+                        //   ),
+                        // ),
+                        // DataCell(
+                        //   Text(
+                        //     object?.boundingBox.toString().substring(object
+                        //             .boundingBox
+                        //             .toString()
+                        //             .indexOf("(")) ??
+                        //         "0",
+                        //   ),
+                        // ),
+                        // const DataCell(TextField()),
+                        // const DataCell(TextField())
+                        DataCell(Text(
+                            "${(object?.boundingBox.width ?? 0 * widthRatio).toStringAsFixed(2)} cm")),
+                        DataCell(Text(
+                            "${(object?.boundingBox.height ?? 0 * heightRatio).toStringAsFixed(2)} cm"))
                       ],
                     );
                   },
@@ -239,16 +348,18 @@ class _MyAppState extends State<MyApp> {
 
 class RectPainter extends CustomPainter {
   Rect rect;
+  Color color;
 
-  RectPainter(this.rect);
+  RectPainter(this.rect, this.color);
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(
         rect,
         Paint()
-          ..color = Colors.red
-          ..style = PaintingStyle.stroke);
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3);
   }
 
   @override
