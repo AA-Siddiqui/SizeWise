@@ -43,11 +43,15 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-yolov10b_saved_model
 calibration_image_sample_data_20x128x128x3_float32.npy
+yolov10b_saved_model
 yolov10b.onnx
 yolov10b.pt
+
 yolo11x_saved_model
-calibration_image_sample_data_20x128x128x3_float32.npy
 yolo11x.onnx
 yolo11x.pt
+
+yolo11x-cls_saved_model
+yolo11x-cls.onnx
+yolo11x-cls.pt

@@ -80,6 +80,8 @@ class _MyAppState extends State<MyApp> {
                   if (image == null) return;
                   // final imageTemp = File(image.path);
                   setState(() => filePath = image.path);
+                } catch (e) {
+                  print(e);
                 } finally {}
               },
               child: const Icon(Icons.add_a_photo),
@@ -161,13 +163,16 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<ObjectDetector> _initObjectDetectorWithLocalModel() async {
-    // final modelPath = await _copy('assets/yolov8n.mlmodel');
+    // final modelPath = await _copy('assets/yolo11x-cls_int8.tflite');
+    // final metadataPath = await _copy('assets/metadata-11-cls.yaml');
     // final model = LocalYoloModel(
     //   id: '',
     //   task: Task.detect,
-    //   format: Format.coreml,
+    //   format: Format.tflite,
     //   modelPath: modelPath,
+    //   metadataPath: metadataPath,
     // );
+
     final modelPath = await _copy('assets/yolov8n_int81.tflite');
     final metadataPath = await _copy('assets/metadatad.yaml');
     final model = LocalYoloModel(
@@ -214,7 +219,7 @@ class _MyAppState extends State<MyApp> {
         await referencePredictor.loadModel(useGpu: true) ?? "Failed GPU?";
     String yy = filePath == null ? await _copy("assets/dog.webp") : filePath!;
     List<DetectedObject?> referenceObjects =
-        await predictor.detect(imagePath: yy) ?? [];
+        await referencePredictor.detect(imagePath: yy) ?? [];
 
     DetectedObject maxReference = DetectedObject(
         confidence: -1, boundingBox: Rect.zero, index: -1, label: "");
@@ -227,11 +232,11 @@ class _MyAppState extends State<MyApp> {
     print("Reference, Width in px: ${maxReference.boundingBox.width}");
     print("Reference, Height in px: ${maxReference.boundingBox.height}");
 
-    final double widthRatio = maxReference.boundingBox.width / 1.85;
-    final double heightRatio = maxReference.boundingBox.height / 1.85;
+    final double scalingFactorX = 1.85 / maxReference.boundingBox.width;
+    final double scalingFactorY = 1.85 / maxReference.boundingBox.height;
 
-    print("Reference, X-Pixel per cm: $widthRatio");
-    print("Reference, Y-Pixel per cm: $heightRatio");
+    print("Reference, Scaling Factor for Width: $scalingFactorX");
+    print("Reference, Scaling Factor for Height: $scalingFactorY");
 
     return Rec(
         detectedObject: objects,
@@ -245,8 +250,8 @@ class _MyAppState extends State<MyApp> {
                   DataColumn(label: Text("Label")),
                   // DataColumn(label: Text("Confidence")),
                   // DataColumn(label: Text("Rect")),
-                  DataColumn(label: Text("X-size")),
-                  DataColumn(label: Text("Y-size")),
+                  DataColumn(label: Text("X x Y (cm)")),
+                  DataColumn(label: Text("X x Y (px)")),
                 ],
                 rows: objects.where((e) => e != null).map(
                   // rows: objects.where((e) => e != null).map(
@@ -272,9 +277,9 @@ class _MyAppState extends State<MyApp> {
                         // const DataCell(TextField()),
                         // const DataCell(TextField())
                         DataCell(Text(
-                            "${(object?.boundingBox.width ?? 0 * widthRatio).toStringAsFixed(2)} cm")),
+                            "${((object?.boundingBox.width ?? 0) * scalingFactorX).toStringAsFixed(2)} x ${((object?.boundingBox.height ?? 0) * scalingFactorY).toStringAsFixed(2)} cm")),
                         DataCell(Text(
-                            "${(object?.boundingBox.height ?? 0 * heightRatio).toStringAsFixed(2)} cm"))
+                            "${(object?.boundingBox.width ?? 0).toStringAsFixed(2)} x ${(object?.boundingBox.height ?? 0).toStringAsFixed(2)} px")),
                       ],
                     );
                   },
